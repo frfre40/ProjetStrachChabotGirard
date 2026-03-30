@@ -189,3 +189,70 @@ def comparaisonDensite(P, Pmod, tolerance = 1e-8):
     critere = np.allclose(P, Pmod, atol = tolerance)
 
     return critere
+
+
+
+########################################################################
+########################################################################
+##Cette section contient la fonction pour faire le calcul Hartree-Fock##
+########################################################################
+########################################################################
+
+def HartreeFock(element, basisSet, r):
+
+    #1- initialisation de la molécule
+    molecule = constructionMolecule(element, basisSet, r)
+
+    #2- Construction du Hamiltonien
+    Hcore = constructionHamiltonienCore(molecule)
+
+    #3- Construction de l'opérateur de Coulomb et de l'opérateur d'échange 
+    #(l'opérateur d'échange est construit à partir de l'opérateur de Coulomb, il n'est pas nécessaire de le construire séparément)
+    ERI = constructionIntegralesERI(molecule)
+
+    #4- Construction de la matrice d'overlap
+    S = constructionIntegralesOverlap(molecule)
+
+    #5- Construction la matrice de densité initiale (on peut choisir n'importe quelle matrice de densité, ici on choisit la matrice de densité nulle)
+    #Ce guess initial est basé sur le chapitre 13.16 de Quantum Chemistry de Levine
+    n_orbitals = Hcore.shape[0]
+    P = np.zeros((n_orbitals, n_orbitals))
+
+    #6- Construisage de la matrice d'orthonormalisation
+    X = matriceOrthonormalisation(S)
+
+    #7- Construisage du premier guess pour Fock
+    F = OperateurFock(Hcore, ERI, P)
+
+    #8- Transformation de F avant la diagonalisation
+    Fprime = transformationFock(F, X)
+
+    #9- Diagonalisation de Fprime les valeurs propres et les vecteurs propres dans la base orthonormale, aka les énergies
+    #et les coefficients d'orbitales moléculaires dans la base orthonormale
+    epsilon, Cprime = diagonalisationFock(Fprime)
+
+    #10-Pitchage des coefficients de Cprime de la base orthonormale à la base initiale (celle d'orbitales atomiques)
+    C = transformationCoefficients(Cprime, X)
+
+    #11- Updatage de la matrice de densité P à partir de la matrice de coefficients C obtenue à l'itération actuelle
+    Pupdate = updateMatriceDensite(C, n_occ = 1)
+
+    #12- SCF BABYYYYYYYYYY
+    #P de l'itération initiale est comparée avec Pupdate de l'itération actuelle.
+    #Si les deux matrices de densité sont égales (à une tolérance près), alors le calcul a convergé et la boucle s'arrête.
+    #Sinon, on met P à jour avec Pupdate, et on recommence le calcul à partir de l'étape 
+    while not comparaisonDensite(P, Pupdate):
+        P = Pupdate.copy()
+        F = OperateurFock(Hcore, ERI, P)
+        Fprime = transformationFock(F, X)
+        epsilon, Cprime = diagonalisationFock(Fprime)
+        C = transformationCoefficients(Cprime, X)
+        Pupdate = updateMatriceDensite(C, n_occ = 1)
+
+    return None
+
+
+xavier = constructionMolecule('H', "sto-3g", 1.0)
+print(np.shape(constructionIntegralesERI(xavier)))
+    
+
