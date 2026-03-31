@@ -2,6 +2,8 @@ import pyscf as scf
 import numpy as np
 from scipy.linalg import eigh
 
+from matplotlib import pyplot as plt
+
 """Ce module contient toutes les fonctions servant à trouver l'énergie totale de la molécule à l'étude en
    utilisant la méthode de Hartree-Fock. Celui-ci est organisé plusieurs sections: la première sert à bâtir les
    opérateurs utiles au calcul avec la méthode de Hartree-Fock, la seconde sert à diagonaliser l'opérateur de Fock
@@ -32,8 +34,6 @@ def constructionMolecule(element, basis, r):
     molecule.build()
 
     return molecule
-
-H2 = constructionMolecule('H', 'sto-3g', 1.0)
 
 #Calcul des intégrales pour construire le Hamiltonien core
 def constructionHamiltonienCore(molecule):
@@ -145,7 +145,7 @@ def diagonalisationFock(Fprime):
         epsilon (numpy.ndarray): Vecteur des énergies orbitalaires (valeurs propres de F')
         Cprime (numpy.ndarray): Matrice des coefficients d'orbitales moléculaires dans la base orthonormale (vecteurs propres de F')"""
     valeursPropres, vecteursPropres = eigh(Fprime)
-    epsilon = np.diag(valeursPropres)
+    epsilon = valeursPropres
     Cprime = vecteursPropres
 
     return epsilon, Cprime
@@ -177,7 +177,7 @@ def updateMatriceDensite(C, n_occ):
     return 2.0 * Cocc @ Cocc.T
 
 
-def comparaisonDensite(P, Pmod, tolerance = 1e-8):
+def comparaisonDensite(P, Pmod, tolerance = 1e-10):
     """Critère d'arrêt pour la boucle SCF
     Args:
         P (numpy.ndarray): Matrice densité initiale obtenue à l'itération d'avant
@@ -186,7 +186,7 @@ def comparaisonDensite(P, Pmod, tolerance = 1e-8):
     Returns: 
             arret (boolean): booleen qui dit au programme si le calcul a converge ou non """
     
-    critere = np.allclose(P, Pmod, atol = tolerance)
+    critere = np.allclose(P, Pmod, atol = tolerance, rtol=0.0)
 
     return critere
 
@@ -202,6 +202,7 @@ def HartreeFock(element, basisSet, r):
 
     #1- initialisation de la molécule
     molecule = constructionMolecule(element, basisSet, r)
+    n_occ = molecule.nelectron // 2
 
     #2- Construction du Hamiltonien
     Hcore = constructionHamiltonienCore(molecule)
@@ -214,7 +215,7 @@ def HartreeFock(element, basisSet, r):
     S = constructionIntegralesOverlap(molecule)
 
     #5- Construction la matrice de densité initiale (on peut choisir n'importe quelle matrice de densité, ici on choisit la matrice de densité nulle)
-    #Ce guess initial est basé sur le chapitre 13.16 de Quantum Chemistry de Levine
+    #Ce guess initial est basé sur une suggestion faite dans le chapitre 13.16 de Quantum Chemistry par Levine
     n_orbitals = Hcore.shape[0]
     P = np.zeros((n_orbitals, n_orbitals))
 
@@ -235,24 +236,54 @@ def HartreeFock(element, basisSet, r):
     C = transformationCoefficients(Cprime, X)
 
     #11- Updatage de la matrice de densité P à partir de la matrice de coefficients C obtenue à l'itération actuelle
-    Pupdate = updateMatriceDensite(C, n_occ = 1)
+    Pupdate = updateMatriceDensite(C, n_occ=n_occ)
+
 
     #12- SCF BABYYYYYYYYYY
     #P de l'itération initiale est comparée avec Pupdate de l'itération actuelle.
     #Si les deux matrices de densité sont égales (à une tolérance près), alors le calcul a convergé et la boucle s'arrête.
     #Sinon, on met P à jour avec Pupdate, et on recommence le calcul à partir de l'étape 
+
+    compteur = 1
+
+
     while not comparaisonDensite(P, Pupdate):
+        print(f"SCF iteration {compteur} - max difference in density matrix: {np.max(np.abs(P - Pupdate)):.2e}")
         P = Pupdate.copy()
         F = OperateurFock(Hcore, ERI, P)
         Fprime = transformationFock(F, X)
         epsilon, Cprime = diagonalisationFock(Fprime)
         C = transformationCoefficients(Cprime, X)
-        Pupdate = updateMatriceDensite(C, n_occ = 1)
+        Pupdate = updateMatriceDensite(C, n_occ=n_occ)
+        compteur += 1
+        if compteur > 400:
+            break
 
-    return None
+    #Calcul de l'énergie trouvée avec Hartree-Fock. Cette équation est l'équation (13.168) de la 
+    #cinquième édition de Quantum Chemistry par Levine
+    energieMatrice = 0.5 * P @ (F + Hcore)
+    energieElectroniqueHF = np.trace(energieMatrice)
+    energieHF = energieElectroniqueHF + molecule.energy_nuc()
+
+    return energieHF
 
 
-xavier = constructionMolecule('H', "sto-3g", 1.0)
-print(np.shape(constructionIntegralesERI(xavier)))
-    
+if __name__ == "__main__":
+    liste1 = []
+    liste2 = []
+    liste3 = []
+    for r in np.linspace(0.3, 3.0, 30):
+        liste1.append(HartreeFock('H', 'sto-6g', r))
+        liste2.append(HartreeFock('H', 'sto-3g', r))
+        liste3.append(HartreeFock('H', 'cc-pVDZ', r))
+        
+    plt.plot(np.linspace(0.4, 5.0, 30), liste1, marker='o', label='STO-6G')
+    plt.plot(np.linspace(0.4, 5.0, 30), liste2, marker='o', label='STO-3G')
+    plt.plot(np.linspace(0.4, 5.0, 30), liste3, marker='o', label='cc-pVDZ')
 
+    plt.xlabel('Distance interatomique (Bohr)')
+    plt.ylabel('Energie totale (Hartree)')
+    plt.title('Energie totale de H2 en fonction de la distance interatomique')
+    plt.grid()
+    plt.legend()
+    plt.show()
