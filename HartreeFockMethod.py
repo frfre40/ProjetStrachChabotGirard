@@ -269,18 +269,28 @@ def HartreeFock(element, basisSet, r):
 
 
 if __name__ == "__main__":
+
+    ###Test avec 3 basis sets différents sur plusieurs distances interatomiques
     liste1 = []
     liste2 = []
     liste3 = []
-    for r in np.linspace(0.3, 3.0, 30):
+    liste4 = []
+    distances = np.linspace(0.3, 3.0, 30)
+    for r in distances:
+        #Calcul avec fonction maison
         liste1.append(HartreeFock('H', 'sto-6g', r))
         liste2.append(HartreeFock('H', 'sto-3g', r))
-        liste3.append(HartreeFock('H', 'cc-pVDZ', r))
-        
-    plt.plot(np.linspace(0.4, 5.0, 30), liste1, marker='o', label='STO-6G')
-    plt.plot(np.linspace(0.4, 5.0, 30), liste2, marker='o', label='STO-3G')
-    plt.plot(np.linspace(0.4, 5.0, 30), liste3, marker='o', label='cc-pVDZ')
+        liste4.append(HartreeFock('H', 'def2-TZVP', r))
+        #Calcul avec PySCF pour vérifier les résultats de la fonction maison
+        molecule = constructionMolecule('H', 'sto-3g', r)
+        mf = scf.scf.RHF(molecule)
+        liste3.append(mf.kernel())
 
+        
+    plt.plot(distances, liste1, marker='o', label='STO-6G (custom)')
+    plt.plot(distances, liste2, marker='o', label='STO-3G (custom)')
+    plt.plot(distances, liste4, marker='o', label='def2-TZVP (custom)')
+    plt.plot(distances, liste3, marker='o', linestyle='--', label='STO-3G (PySCF)')
     plt.xlabel('Distance interatomique (Bohr)')
     plt.ylabel('Energie totale (Hartree)')
     plt.title('Energie totale de H2 en fonction de la distance interatomique')
