@@ -1,6 +1,7 @@
 import pyscf as scf
 import numpy as np
 from scipy.linalg import eigh
+from scipy.optimize import curve_fit
 
 from matplotlib import pyplot as plt
 
@@ -286,11 +287,67 @@ if __name__ == "__main__":
         mf = scf.scf.RHF(molecule)
         liste3.append(mf.kernel())
 
+    liste1_raw = np.array(liste1)
+    liste2_raw = np.array(liste2)
+    liste3_raw = np.array(liste3)
+    liste4_raw = np.array(liste4)
+
+    min1 = np.min(liste1_raw)
+    min2 = np.min(liste2_raw)
+    min3 = np.min(liste3_raw)
+    min4 = np.min(liste4_raw)
+
+    liste1 = liste1_raw - min1
+    liste2 = liste2_raw - min2
+    liste3 = liste3_raw - min3
+    liste4 = liste4_raw - min4
+
+    def Morse(r, De, a, re):
+        """Fonction de Morse pour faire un fit des données obtenues avec la fonction maison
+        Args:
+            r (numpy.ndarray): Tableau des distances interatomiques
+            De (float): Profondeur du puits de potentiel
+            a (float): Paramètre de largeur du puits de potentiel
+            re (float): Distance d'équilibre entre les atomes
+        Returns:
+            V (numpy.ndarray): Tableau des énergies potentielles calculées à partir de la fonction de Morse pour les distances r"""
+        return De * (1 - np.exp(-a * (r - re)))**2
+
+    def MorseAvecOffset(r, De, a, re, Einf):
+        """Potentiel de Morse avec offset: E(re)=Einf-De et E(r->inf)=Einf."""
+        return Einf + De * (1 - np.exp(-a * (r - re)))**2 - De
+
+    params, _ = curve_fit(
+        MorseAvecOffset,
+        distances,
+        liste3_raw,
+        p0=[0.1745, 1.04, 0.74, -1.0],
+        bounds=([0.0, 0.0, 0.2, -2.0], [2.0, 10.0, 2.0, 0.0]),
+        maxfev=10000,
+    )
+    De_fit, a_fit, re_fit, Einf_fit = params
+
+    print("\nParametres Morse ajustes sur liste3 (PySCF STO-3G):")
+    print(f"De   = {De_fit:.8f} Eh")
+    print(f"a    = {a_fit:.8f} Bohr^-1")
+    print(f"re   = {re_fit:.8f} Angstrom")
+    print(f"Einf = {Einf_fit:.8f} Eh")
+    print(f"Emin = {Einf_fit - De_fit:.8f} Eh")
         
+    x = np.linspace(0.01, 3.0, 100)
+    De = 0.1745
+    a = 1.04
+    re = 0.74
+    morse_fit_shifted = MorseAvecOffset(x, De_fit, a_fit, re_fit, Einf_fit) - min3
+
     plt.plot(distances, liste1, marker='o', label='STO-6G (custom)')
     plt.plot(distances, liste2, marker='o', label='STO-3G (custom)')
     plt.plot(distances, liste4, marker='o', label='def2-TZVP (custom)')
     plt.plot(distances, liste3, marker='o', linestyle='--', label='STO-3G (PySCF)')
+    #La fonction graphée avec Morse en utilisant les données expérimentales ne fonctionne pas
+    #(elle ne monte pas violemment près de l'origine)
+    plt.plot(x, morse_fit_shifted, linestyle='-', label='Morse fit (liste3)')
+    plt.axhline(De, color='black', linestyle='--', linewidth=1.0)
     plt.xlabel('Distance interatomique (Bohr)')
     plt.ylabel('Energie totale (Hartree)')
     plt.title('Energie totale de H2 en fonction de la distance interatomique')
