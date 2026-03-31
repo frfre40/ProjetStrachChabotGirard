@@ -334,7 +334,7 @@ if __name__ == "__main__":
     print(f"Einf = {Einf_fit:.8f} Eh")
     print(f"Emin = {Einf_fit - De_fit:.8f} Eh")
         
-    x = np.linspace(0.01, 3.0, 100)
+    x = np.linspace(0.01, 6.0, 100)
     De = 0.1745
     a = 1.04
     re = 0.74
